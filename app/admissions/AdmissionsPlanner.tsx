@@ -33,6 +33,23 @@ const STAGE_LABELS: Record<string, string> = {
   interviewed: "Interviewed", waitlisted: "Waitlisted", converted: "Converted", closed: "Closed",
 };
 
+function dateKey(value: string | null) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
+    ? `${year}-${month}-${day}`
+    : null;
+}
+
+function formatDate(value: string, options: Intl.DateTimeFormatOptions) {
+  const key = dateKey(value);
+  if (!key) return "Date unavailable";
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-IN", options);
+}
+
 async function responseError(response: Response) {
   const body = await response.json().catch(() => null) as { error?: string } | null;
   return body?.error || "Admissions request failed.";
@@ -97,11 +114,18 @@ export function AdmissionsPlanner() {
     await mutate("DELETE", undefined, `?resource=${resource}&id=${encodeURIComponent(id)}`);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const activeApplications = data.applications.filter(item => !["closed", "converted"].includes(item.stage));
   const nextDeadlines = useMemo(() => [
-    ...data.tasks.filter(item => !item.completed && item.due_date).map(item => ({ id: item.id, date: item.due_date!, label: item.title, type: "Task" })),
-    ...activeApplications.filter(item => item.deadline).map(item => ({ id: item.id, date: item.deadline!, label: `${item.institute} · ${item.next_action || "Application deadline"}`, type: "Application" })),
+    ...data.tasks.filter(item => !item.completed).flatMap(item => {
+      const date = dateKey(item.due_date);
+      return date ? [{ id: item.id, date, label: item.title, type: "Task" }] : [];
+    }),
+    ...activeApplications.flatMap(item => {
+      const date = dateKey(item.deadline);
+      return date ? [{ id: item.id, date, label: `${item.institute} · ${item.next_action || "Application deadline"}`, type: "Application" }] : [];
+    }),
   ].filter(item => item.date >= today).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 6), [activeApplications, data.tasks, today]);
   const nextAction = nextDeadlines[0];
   const converted = data.applications.filter(item => item.stage === "converted").length;
@@ -129,7 +153,7 @@ export function AdmissionsPlanner() {
         <section className="ad-hero">
           <div><span className="ad-kicker">POST-EXAM COMMAND CENTRE</span><h1>Turn the score<br />into the <em>right admit.</em></h1>
           <p>Deadlines, applications, interviews and decisions—one honest operating system for everything after CAT.</p></div>
-          <aside><span>NEXT CONSEQUENTIAL MOVE</span><strong>{nextAction?.label || "Build your admissions pipeline"}</strong><small>{nextAction ? new Date(`${nextAction.date}T12:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "Add an application or task to begin"}</small></aside>
+          <aside><span>NEXT CONSEQUENTIAL MOVE</span><strong>{nextAction?.label || "Build your admissions pipeline"}</strong><small>{nextAction ? formatDate(nextAction.date, { day: "numeric", month: "long", year: "numeric" }) : "Add an application or task to begin"}</small></aside>
         </section>
         <section className="ad-metrics">
           <div><span>ACTIVE APPLICATIONS</span><b>{activeApplications.length}</b></div><div><span>SHORTLISTS</span><b>{data.applications.filter(item => item.stage === "shortlisted").length}</b></div>
@@ -144,7 +168,7 @@ export function AdmissionsPlanner() {
             </article>) : <p className="ad-empty">No tasks yet. Add the next action that could otherwise slip.</p>}</div>
           </div>
           <div className="ad-panel"><div className="ad-panel-head"><div><span className="ad-kicker">02 // WATCH</span><h2>Deadline radar</h2></div></div>
-            <div className="ad-deadlines">{nextDeadlines.length ? nextDeadlines.map(item => <article key={`${item.type}-${item.id}`}><time>{new Date(`${item.date}T12:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</time><div><b>{item.label}</b><small>{item.type}</small></div></article>) : <p className="ad-empty">Upcoming dated tasks and applications appear here.</p>}</div>
+            <div className="ad-deadlines">{nextDeadlines.length ? nextDeadlines.map(item => <article key={`${item.type}-${item.id}`}><time>{formatDate(item.date, { day: "2-digit", month: "short" })}</time><div><b>{item.label}</b><small>{item.type}</small></div></article>) : <p className="ad-empty">Upcoming dated tasks and applications appear here.</p>}</div>
           </div>
         </section>
         <ResultSection results={data.results} open={openForm === "result"} setOpen={() => setOpenForm(openForm === "result" ? null : "result")} create={create} busy={busy} remove={remove} />
