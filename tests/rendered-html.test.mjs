@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+process.env.CAT_OWNER_PASSWORD = "deployment-smoke-password";
+
 const serverUrl = new URL(
   "../.vercel/output/functions/__server.func/index.mjs",
   import.meta.url,
@@ -26,13 +28,25 @@ test("Vercel server function renders the home page", async () => {
   assert.match(html, /CAT 2026/);
 });
 
-test("Vercel server function routes API requests", async () => {
+test("Vercel server function protects state and creates an owner session", async () => {
   const response = await server.fetch(
     new Request("https://example.test/api/state?key=cat26-deployment-smoke"),
     context,
   );
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 401);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
-  assert.deepEqual(await response.json(), { value: null });
+  assert.deepEqual(await response.json(), { error: "Owner sign-in required." });
+
+  const login = await server.fetch(
+    new Request("https://example.test/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "deployment-smoke-password" }),
+    }),
+    context,
+  );
+
+  assert.equal(login.status, 200);
+  assert.match(login.headers.get("set-cookie") ?? "", /cat-prep-owner=/);
 });

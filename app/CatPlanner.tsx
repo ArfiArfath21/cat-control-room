@@ -84,10 +84,18 @@ const RESOURCES = [
 
 const USE_BROWSER_STORAGE = process.env.NEXT_PUBLIC_CAT_STORAGE === "browser";
 
+class StorageAuthError extends Error {}
+
+async function throwStorageError(response: Response, fallback: string): Promise<never> {
+  if (response.status === 401) throw new StorageAuthError("Owner sign-in required.");
+  const body = await response.json().catch(() => null) as { error?: string } | null;
+  throw new Error(body?.error || fallback);
+}
+
 async function loadStoredValue(key: string) {
   if (USE_BROWSER_STORAGE) return localStorage.getItem(key);
   const response = await fetch(`/api/state?key=${encodeURIComponent(key)}`, { cache: "no-store" });
-  if (!response.ok) throw new Error("The server memory store is unavailable.");
+  if (!response.ok) await throwStorageError(response, "Persistent storage is unavailable.");
   const data = await response.json() as { value: string | null };
   return data.value;
 }
@@ -102,7 +110,7 @@ async function saveStoredValue(key: string, value: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, value }),
   });
-  if (!response.ok) throw new Error("The server memory store could not save your changes.");
+  if (!response.ok) await throwStorageError(response, "Persistent storage could not save your changes.");
 }
 
 function useLocalSet(key: string) {
@@ -137,10 +145,21 @@ export function CatPlanner() {
   const [weeklyReview, setWeeklyReview] = useState("");
   const [weekLoaded, setWeekLoaded] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const [requiresOwnerLogin, setRequiresOwnerLogin] = useState(false);
+  const [ownerLoginError, setOwnerLoginError] = useState("");
   const [milestones, toggleMilestone] = useLocalSet("cat26-milestones");
 
+  function handleStorageFailure(error: unknown) {
+    if (error instanceof StorageAuthError) {
+      setRequiresOwnerLogin(true);
+      setStorageError("Sign in to load your saved CAT progress.");
+      return;
+    }
+    setStorageError(error instanceof Error ? error.message : "Persistent storage is unavailable.");
+  }
+
   function persist(key: string, value: string) {
-    void saveStoredValue(key, value).catch(error => setStorageError(error instanceof Error ? error.message : "Storage is unavailable."));
+    void saveStoredValue(key, value).catch(handleStorageFailure);
   }
 
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(timer); }, []);
@@ -157,7 +176,7 @@ export function CatPlanner() {
       setDailyHistory(JSON.parse(history || "{}"));
       if (savedProfile) setProfile(JSON.parse(savedProfile)); else setShowProfile(true);
     }).catch(error => {
-      if (!cancelled) setStorageError(error instanceof Error ? error.message : "Storage is unavailable.");
+      if (!cancelled) handleStorageFailure(error);
     }).finally(() => { if (!cancelled) setProfileLoaded(true); });
     return () => { cancelled = true; };
   }, []);
@@ -210,7 +229,7 @@ export function CatPlanner() {
         setWeeklyDone(new Set()); setWeeklyReview("");
       }
     }).catch(error => {
-      if (!cancelled) { setStorageError(error instanceof Error ? error.message : "Storage is unavailable."); setWeeklyPlan([]); setWeeklyDone(new Set()); setWeeklyReview(""); }
+      if (!cancelled) { handleStorageFailure(error); setWeeklyPlan([]); setWeeklyDone(new Set()); setWeeklyReview(""); }
     }).finally(() => { if (!cancelled) setWeekLoaded(true); });
     return () => { cancelled = true; };
   }, [weekKey, weakestSections]);
@@ -289,6 +308,23 @@ export function CatPlanner() {
     setProfile(next); persist("cat26-profile", JSON.stringify(next)); setShowProfile(false);
   }
 
+  async function signInToStorage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setOwnerLoginError("");
+    const password = String(new FormData(event.currentTarget).get("password") || "");
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      setOwnerLoginError(body?.error || "Could not sign in.");
+      return;
+    }
+    window.location.reload();
+  }
+
   function addMock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -310,9 +346,19 @@ export function CatPlanner() {
         <button className="pill-link" onClick={() => setShowProfile(true)}>My setup ↗</button>
       </header>
       <div className={`storage-banner ${storageError ? "error" : ""}`}>
-        <span>{storageError || (USE_BROWSER_STORAGE ? "Browser storage mode" : "Server memory mode")}</span>
-        {!storageError && !USE_BROWSER_STORAGE && <small>Data lasts only for the life of this server instance.</small>}
+        <span>{storageError || (USE_BROWSER_STORAGE ? "Browser storage mode" : "Persistent Redis storage")}</span>
+        {!storageError && !USE_BROWSER_STORAGE && <small>Your progress is saved across deployments and cold starts.</small>}
       </div>
+
+      {requiresOwnerLogin && <div className="profile-backdrop" role="presentation">
+        <form className="profile-panel storage-login" onSubmit={signInToStorage}>
+          <div><span className="kicker">OWNER ACCESS</span><h2>Unlock your control room</h2></div>
+          <p>Your preparation data is private. Enter the owner password configured in Vercel.</p>
+          <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
+          {ownerLoginError && <p className="login-error" role="alert">{ownerLoginError}</p>}
+          <button className="primary-btn" type="submit">Unlock progress</button>
+        </form>
+      </div>}
 
       {showProfile && profileLoaded && <div className="profile-backdrop" role="presentation" onMouseDown={() => setShowProfile(false)}>
         <form className="profile-panel" onSubmit={saveProfile} onMouseDown={event => event.stopPropagation()}>

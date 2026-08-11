@@ -6,17 +6,42 @@ Drizzle support.
 
 ## Storage mode
 
-The tracker uses server memory by default. No environment variable is required.
-This is intentionally simple, but data can be lost when a serverless host cold-starts,
-scales to another instance, or redeploys.
+Production storage uses the official Redis Cloud integration from the Vercel
+Marketplace. Vercel injects its native connection string as `REDIS_URL`. Each
+tracker document is stored as a Redis string without a TTL.
 
-To use the original browser-local storage implementation instead, set:
+Set `CAT_OWNER_PASSWORD` manually in Vercel. Visitors must enter this password
+before `/api/state` will read or write progress. A signed, HTTP-only,
+same-site cookie keeps the owner signed in for 90 days.
+
+For local development, copy `.env.example` to `.env.local` and provide the same
+three values. To use browser-local storage instead, set:
 
 ```bash
 NEXT_PUBLIC_CAT_STORAGE=browser
 ```
 
-The memory API lives at `/api/state` and accepts tracker keys prefixed with `cat26-`.
+Browser storage is device- and browser-specific and is not synchronized. The
+persistent API lives at `/api/state` and accepts tracker keys prefixed with
+`cat26-`.
+
+### Vercel setup
+
+1. Open the Vercel project and select **Storage**, then the provisioned official
+   **Redis** resource.
+2. Connect the Redis Cloud database to this project for Production (and Preview
+   if desired). Prefer a database region close to the Vercel function region.
+3. Confirm that `REDIS_URL` appears under the project's environment variables.
+4. In **Settings → Environment Variables**, add `CAT_OWNER_PASSWORD` with a
+   strong, unique value for Production (and Preview if desired).
+5. Do not add a TTL to the tracker keys. For stronger durability, use a Redis
+   Cloud plan with data persistence enabled; Vercel's Redis Marketplace page
+   currently lists persistence as a paid-plan feature.
+6. Redeploy so the new environment variables are available to the function.
+
+Existing server-memory values cannot be migrated because they belonged to an
+individual function instance. After the Redis deployment, sign in once and
+re-enter any progress that was not already stored in browser mode.
 
 ## Prerequisites
 
