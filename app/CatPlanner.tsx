@@ -343,7 +343,7 @@ export function CatPlanner() {
         <nav aria-label="Main navigation">
           <a href="#today">Today</a><a href="#week">Week</a><a href="#syllabus">Syllabus</a><a href="#mocks">Mocks</a><a href="#milestones">Milestones</a>
         </nav>
-        <button className="pill-link" onClick={() => setShowProfile(true)}>My setup ↗</button>
+        <div className="top-actions"><a className="pill-link" href="/admissions">Admissions ↗</a><button className="pill-link" onClick={() => setShowProfile(true)}>My setup ↗</button></div>
       </header>
       <div className={`storage-banner ${storageError ? "error" : ""}`}>
         <span>{storageError || (USE_BROWSER_STORAGE ? "Browser storage mode" : "Persistent Redis storage")}</span>

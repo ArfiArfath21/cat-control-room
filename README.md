@@ -43,6 +43,29 @@ Existing server-memory values cannot be migrated because they belonged to an
 individual function instance. After the Redis deployment, sign in once and
 re-enter any progress that was not already stored in browser mode.
 
+## Admissions mode
+
+Admissions mode lives at `/admissions` and uses Supabase Postgres. It does not
+read, rewrite, migrate, or delete any CAT Prep Redis key.
+
+### Supabase setup on Vercel
+
+1. In the Vercel project, open **Storage → Browse Marketplace → Supabase**.
+2. Create or connect a standard Supabase Postgres project to Production (and
+   Preview if desired).
+3. Confirm that Vercel injected `POSTGRES_URL`. The integration supplies the
+   pooled application connection; the application never exposes it to the
+   browser.
+4. Open Supabase Studio from Vercel, then open **SQL Editor**.
+5. Run the complete migration in
+   `supabase/migrations/202608120001_admissions_mode.sql`.
+6. Redeploy the Vercel project after the integration and migration are ready.
+7. Visit `/admissions` and use the same `CAT_OWNER_PASSWORD` as CAT Prep.
+
+The admissions tables have Row Level Security enabled and grant no Data API
+access to anonymous or authenticated browser roles. All access flows through
+the owner-protected server API and the server-only Postgres connection.
+
 ## Prerequisites
 
 - Node.js `>=22.13.0`

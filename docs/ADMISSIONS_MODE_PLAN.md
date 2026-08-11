@@ -6,8 +6,10 @@ Extend the CAT control room beyond exam day into a private admissions operating
 system: results, applications, WAT/PI preparation, interviews, waitlists,
 offers, and the final school decision.
 
-This is a future plan, not part of the current implementation. The immediate
-product remains focused on CAT preparation.
+Implementation status: the first release is now available at `/admissions`,
+covering the dashboard, result snapshot, institute pipeline, deadlines/tasks,
+story bank, WAT/PI practice, and initial decision view. Sections below also
+capture later enhancements that have not yet been built.
 
 ## Product transition
 

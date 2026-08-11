@@ -26,6 +26,24 @@ test("Vercel server function renders the home page", async () => {
   const html = await response.text();
   assert.match(html, /<title>CAT 2026 Control Room<\/title>/i);
   assert.match(html, /CAT 2026/);
+  assert.match(html, /https:\/\/cat-prep\.arfath\.me\/og-cat-2026\.png/i);
+  assert.match(html, /property=["']og:image["']/i);
+  assert.match(html, /name=["']twitter:card["'][^>]*content=["']summary_large_image["']/i);
+  assert.match(html, /href=["']\/favicon\.svg["']/i);
+});
+
+test("Vercel server function renders Admissions without changing Prep", async () => {
+  const response = await server.fetch(
+    new Request("https://example.test/admissions", {
+      headers: { accept: "text/html" },
+    }),
+    context,
+  );
+
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Admissions Control Room<\/title>/i);
+  assert.match(html, /ADMISSIONS \/\/ HQ/);
 });
 
 test("Vercel server function protects state and creates an owner session", async () => {
@@ -49,4 +67,10 @@ test("Vercel server function protects state and creates an owner session", async
 
   assert.equal(login.status, 200);
   assert.match(login.headers.get("set-cookie") ?? "", /cat-prep-owner=/);
+
+  const admissions = await server.fetch(
+    new Request("https://example.test/api/admissions"),
+    context,
+  );
+  assert.equal(admissions.status, 401);
 });
